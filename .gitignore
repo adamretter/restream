@@ -1,6 +1,10 @@
 *.class
 *.log
 
+# Intelli-J specific
+.idea/
+*.iml
+
 # sbt specific
 dist/*
 target/
