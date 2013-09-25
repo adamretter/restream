@@ -84,6 +84,7 @@
 					</properties>
 					<excludes>
 						<exclude>pom.xml</exclude>
+						<exclude>LICENSE</exclude>
 					</excludes>
 				</configuration>
 				<executions>
