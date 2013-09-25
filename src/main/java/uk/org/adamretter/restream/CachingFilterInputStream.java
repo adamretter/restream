@@ -43,6 +43,9 @@ import java.io.InputStream;
  */
 public class CachingFilterInputStream extends FilterInputStream {
 
+    //TODO what about if the underlying stream supports marking
+    //then we could just use its capabilities?
+    
     private final static int END_OF_STREAM = -1;
     private final static String INPUTSTREAM_CLOSED = "The underlying InputStream has been closed";
 
@@ -76,10 +79,9 @@ public class CachingFilterInputStream extends FilterInputStream {
     public CachingFilterInputStream(final CachingFilterInputStream cfis) {
         this(cfis.getCache(), cfis);
         this.srcClosed = cfis.srcClosed;
-        this.srcOffset = 0;
-        this.mark = 0;
-        this.useCache = cfis.cacheOffset > 0;
-        this.cacheOffset = cfis.cacheOffset;
+        this.useCache = cfis.srcOffset > 0;
+        this.cacheOffset = cfis.cacheOffset; //TODO is this correct?
+        //this.srcOffset = cfis.srcOffset; //TODO is this correct?
     }
 
     /**
@@ -170,7 +172,7 @@ public class CachingFilterInputStream extends FilterInputStream {
             throw new IOException(INPUTSTREAM_CLOSED);
         }
 
-        if(useCache && cacheOffset < srcOffset) {
+        if(useCache /* && cacheOffset < srcOffset */) {
 
             //copy data from the cache
             int actualLen = (len > getCache().getLength() - cacheOffset ? getCache().getLength() - cacheOffset : len);

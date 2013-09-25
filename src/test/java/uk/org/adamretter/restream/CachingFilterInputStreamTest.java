@@ -61,7 +61,10 @@ public class CachingFilterInputStreamTest {
     }
 
     private final static int _4KB = 4 * 1024;
+    private final static int _6KB = 6 * 1024;
     private final static int _12KB = 12 * 1024;
+    private final static int _32KB = 32 * 1024;
+    private final static int _64KB = 64 * 1024;
     
     private final Class<FilterInputStreamCache> cacheClass;
     public CachingFilterInputStreamTest(final Class<FilterInputStreamCache> cacheClass) {
@@ -782,7 +785,7 @@ public class CachingFilterInputStreamTest {
     public void constructed_from_CachingFilterInputStream_consumed() throws InstantiationException, IllegalAccessException, IOException {
 
         final byte[] testData = generateRandomData(_12KB);
-        final InputStream is = new ByteArrayInputStream(testData);
+        final InputStream is = new NonMarkableByteArrayInputStream(testData);
 
         //first CachingFilterInputStream
         final CachingFilterInputStream cfis1 = new CachingFilterInputStream(getNewCache(), is);
@@ -790,9 +793,56 @@ public class CachingFilterInputStreamTest {
         assertArrayEquals(testData, consumeInputStream(cfis1));
 
         //second CachingFilterInputStream wraps first CachingFilterInputStream
-        final CachingFilterInputStream cfis2 = new CachingFilterInputStream(getNewCache(), cfis1);
+        final CachingFilterInputStream cfis2 = new CachingFilterInputStream(cfis1);
 
         assertArrayEquals(testData, consumeInputStream(cfis2));
+    }
+    
+    @Test
+    public void constructed_from_CachingFilterInputStream_partiallyConsumed() throws InstantiationException, IllegalAccessException, IOException {
+
+        final byte[] testData = generateRandomData(_12KB);
+        final InputStream is = new NonMarkableByteArrayInputStream(testData);
+
+        //first CachingFilterInputStream
+        final CachingFilterInputStream cfis1 = new CachingFilterInputStream(getNewCache(), is);
+
+        //read first 6KB
+        final byte firstPart[] = new byte[_6KB];
+        cfis1.read(firstPart);
+        assertArrayEquals(subArray(testData, _6KB), firstPart); //ensure first 6KB was read!
+
+        //second CachingFilterInputStream wraps first CachingFilterInputStream
+        final CachingFilterInputStream cfis2 = new CachingFilterInputStream(cfis1);
+
+        assertArrayEquals(testData, consumeInputStream(cfis2));
+    }
+    
+    @Test
+    public void sharedCacheWritesInOrder() throws InstantiationException, IllegalAccessException, IOException {
+        final byte[] testData = generateRandomData(_64KB);
+        final InputStream is = new NonMarkableByteArrayInputStream(testData);
+        
+        //first CachingFilterInputStream
+        final CachingFilterInputStream cfis1 = new CachingFilterInputStream(getNewCache(), is);
+        
+        //read first 6KB
+        final byte cfis1Part1[] = new byte[_6KB];
+        cfis1.read(cfis1Part1);
+        assertArrayEquals(subArray(testData, _6KB), cfis1Part1); //ensure first 6KB was read!
+        
+        //second CachingFilterInputStream wraps first CachingFilterInputStream
+        final CachingFilterInputStream cfis2 = new CachingFilterInputStream(cfis1);
+        
+        //read first 32KB from second InputStream
+        final byte cfis2Part1[] = new byte[_32KB];
+        cfis2.read(cfis2Part1);
+        assertArrayEquals(subArray(testData, _32KB), cfis2Part1); //ensure next 32KB was read!
+        
+        //interleave by reading another 6KB from first InputStream
+        final byte cfis1Part2[] = new byte[_6KB];
+        cfis1.read(cfis1Part2);
+        assertArrayEquals(subArray(testData, _6KB, _6KB), cfis1Part2); //ensure first 6KB was read!
     }
 
     private byte[] consumeInputStream(final InputStream is) throws IOException {
