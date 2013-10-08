@@ -24,104 +24,66 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package uk.org.adamretter.restream;
+package uk.org.adamretter.restream.cache;
 
-import java.io.File;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.RandomAccessFile;
 
 /**
  * Cache implementation for CachingFilterInputStream
- * Backed by a Random Access File
- * 
- * Probably slower than MemoryMappedFileFilterInputStreamCache
- * for multiple reads, but uses a fixed small amount of memory.
+ * Backed by an in-memory byte array
  *
  * @version 1.0
  *
  * @author Adam Retter <adam.retter@googlemail.com>
  */
-public class FileFilterInputStreamCache implements FilterInputStreamCache {
-    private final File tempFile;
-    private final boolean externalFile;
-    private int length = 0;
-    private int offset = 0;
-    
-    private final RandomAccessFile raf;
+public class MemoryFilterInputStreamCache implements FilterInputStreamCache {
 
-    public FileFilterInputStreamCache() throws IOException {
-        this(null);
+    private ByteArrayOutputStream cache = new ByteArrayOutputStream();
+
+    public MemoryFilterInputStreamCache() {
     }
-    
-    public FileFilterInputStreamCache(final File f) throws IOException {
-         if(f == null) {
-            tempFile = TemporaryFileManager.getInstance().getTemporaryFile();
-            externalFile = false;
-        } else {
-            tempFile = f;
-            externalFile = true;
-        }
-         
-        this.raf = new RandomAccessFile(tempFile, "rw");
-    }
-    
-    
+
     @Override
     public void write(final byte[] b, final int off, final int len) throws IOException {
-        //force writing to be append only
-        if(offset != length) {
-            raf.seek(length);
-            offset = length;
-        }
-        
-        raf.write(b, off, len);
-        length += len;
-        offset += len;
+        cache.write(b, off, len);
     }
 
     @Override
     public void write(final int i) throws IOException {
-        //force writing to be append only
-        if(offset != length) {
-            raf.seek(length);
-            offset = length;
-        }
-        
-        raf.write(i);
-        length++;
-        offset++;
+        cache.write(i);
+    }
+
+    @Override
+    public byte get(final int off) {
+        return cache.toByteArray()[off];
     }
 
     @Override
     public int getLength() {
-        return length;
+        return cache.size();
     }
 
     @Override
-    public byte get(final int off) throws IOException {
-        if(off != offset) {
-            raf.seek(off);
-            this.offset = off;
-        }
-        return raf.readByte();
-    }
-
-    @Override
-    public void copyTo(final int cacheOffset, final byte[] b, final int off, final int len) throws IOException {
-        if(cacheOffset != offset) {
-            raf.seek(cacheOffset);
-            this.offset = cacheOffset;
-        }
-        raf.readFully(b, off, len);
+    public void copyTo(final int cacheOffset, final byte[] b, final int off, final int len) {
+        System.arraycopy(cache.toByteArray(), cacheOffset, b, off, len);
     }
 
     @Override
     public void invalidate() throws IOException {
-        
-        raf.close();
-        
-        if(tempFile != null && (!externalFile)) {
-           TemporaryFileManager.getInstance().returnTemporaryFile(tempFile);
+        if(cache != null) {
+            cache.close();
+            cache = null;
         }
     }
+
+    /**
+     * Updates to the cache are not reflected in the underlying input stream
+     */
+    
+    //TODO refactor this so that updates to the cache are reflected
+    /*@Override
+    public InputStream getIndependentInputStream() {
+        return new ByteArrayInputStream(cache.toByteArray());
+    }*/
 }

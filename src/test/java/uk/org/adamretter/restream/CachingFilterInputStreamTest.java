@@ -37,6 +37,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Random;
 import org.junit.Test;
+import uk.org.adamretter.restream.cache.FileFilterInputStreamCache;
+import uk.org.adamretter.restream.cache.FilterInputStreamCache;
+import uk.org.adamretter.restream.cache.MemoryFilterInputStreamCache;
+import uk.org.adamretter.restream.cache.MemoryMappedFileFilterInputStreamCache;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertArrayEquals;
 

@@ -26,18 +26,24 @@
  */
 package uk.org.adamretter.restream;
 
+import uk.org.adamretter.restream.cache.FilterInputStreamCache;
+
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * Implementation of an Input Stream Filter that extends
+ * Implementation of an Input Stream that extends
  * any InputStream with mark() and reset() capabilities
  * by caching the read data for later re-reading.
  *
+ * This is similar in concept to java.io.BufferedInputStream
+ * apart from that the cached data is not necessarily kept in
+ * memory as the Cache implementation is configurable.
+ *
  * NOTE - Only supports reading data up to 2GB as the cache index uses an 'int' index
  *
- * @version 1.0
+ * @version 1.1
  *
  * @author Adam Retter <adam.retter@googlemail.com>
  */
