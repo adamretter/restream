@@ -822,7 +822,36 @@ public class CachingFilterInputStreamTest {
 
         assertArrayEquals(testData, consumeInputStream(cfis2));
     }
-    
+
+    /**
+     * When given an underlying InputSource
+     * and caching it twice with the same cache
+     * we should be able to read the input twice
+     * assuming that the input that we are interested
+     * in has not been read before
+     * a mark()
+     */
+    @Test
+    public void interleavedSourceReads() throws InstantiationException, IllegalAccessException, IOException {
+        final byte[] testData = generateRandomData(_64KB);
+        final InputStream is = new NonMarkableByteArrayInputStream(testData);
+
+        final FilterInputStreamCache cache1 = getNewCache();
+
+        final CachingFilterInputStream cfis1 = new CachingFilterInputStream(cache1, is);
+        cfis1.mark(Integer.MAX_VALUE);
+
+        final CachingFilterInputStream cfis2 = new CachingFilterInputStream(cache1, is);
+
+        final byte result1[] = new byte[_12KB];
+        cfis1.read(result1);
+        assertArrayEquals(subArray(testData, _12KB), result1);
+
+        final byte result2[] = new byte[_12KB];
+        cfis2.read(result2);
+        assertArrayEquals(subArray(testData, _12KB), result2);
+    }
+
     @Test
     public void sharedCacheWritesInOrder() throws InstantiationException, IllegalAccessException, IOException {
         final byte[] testData = generateRandomData(_64KB);
