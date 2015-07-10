@@ -30,6 +30,7 @@ import uk.org.adamretter.restream.TemporaryFileManager;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.RandomAccessFile;
 
 /**
@@ -43,39 +44,40 @@ import java.io.RandomAccessFile;
  *
  * @author Adam Retter <adam.retter@googlemail.com>
  */
-public class FileFilterInputStreamCache implements FilterInputStreamCache {
+public class FileFilterInputStreamCache extends AbstractFilterInputStreamCache {
     private final File tempFile;
     private final boolean externalFile;
     private int length = 0;
     private int offset = 0;
-    
+
     private final RandomAccessFile raf;
 
-    public FileFilterInputStreamCache() throws IOException {
-        this(null);
+    public FileFilterInputStreamCache(InputStream src) throws IOException {
+        this(src, null);
     }
-    
-    public FileFilterInputStreamCache(final File f) throws IOException {
-         if(f == null) {
+
+    public FileFilterInputStreamCache(InputStream src, final File f) throws IOException {
+        super(src);
+
+        if (f == null) {
             tempFile = TemporaryFileManager.getInstance().getTemporaryFile();
             externalFile = false;
         } else {
             tempFile = f;
             externalFile = true;
         }
-         
+
         this.raf = new RandomAccessFile(tempFile, "rw");
     }
-    
-    
+
     @Override
     public void write(final byte[] b, final int off, final int len) throws IOException {
         //force writing to be append only
-        if(offset != length) {
+        if (offset != length) {
             raf.seek(length);
             offset = length;
         }
-        
+
         raf.write(b, off, len);
         length += len;
         offset += len;
@@ -84,11 +86,11 @@ public class FileFilterInputStreamCache implements FilterInputStreamCache {
     @Override
     public void write(final int i) throws IOException {
         //force writing to be append only
-        if(offset != length) {
+        if (offset != length) {
             raf.seek(length);
             offset = length;
         }
-        
+
         raf.write(i);
         length++;
         offset++;
@@ -101,7 +103,7 @@ public class FileFilterInputStreamCache implements FilterInputStreamCache {
 
     @Override
     public byte get(final int off) throws IOException {
-        if(off != offset) {
+        if (off != offset) {
             raf.seek(off);
             this.offset = off;
         }
@@ -110,7 +112,7 @@ public class FileFilterInputStreamCache implements FilterInputStreamCache {
 
     @Override
     public void copyTo(final int cacheOffset, final byte[] b, final int off, final int len) throws IOException {
-        if(cacheOffset != offset) {
+        if (cacheOffset != offset) {
             raf.seek(cacheOffset);
             this.offset = cacheOffset;
         }
@@ -119,11 +121,11 @@ public class FileFilterInputStreamCache implements FilterInputStreamCache {
 
     @Override
     public void invalidate() throws IOException {
-        
+
         raf.close();
-        
-        if(tempFile != null && (!externalFile)) {
-           TemporaryFileManager.getInstance().returnTemporaryFile(tempFile);
+
+        if (tempFile != null && (!externalFile)) {
+            TemporaryFileManager.getInstance().returnTemporaryFile(tempFile);
         }
     }
 }
