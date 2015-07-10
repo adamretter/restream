@@ -31,7 +31,7 @@ import uk.org.adamretter.restream.cache.FilterInputStreamCache;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import uk.org.adamretter.restream.cache.FileFilterInputStreamCache;
+
 
 /**
  * Implementation of an Input Stream that extends
@@ -119,7 +119,7 @@ public class CachingFilterInputStream extends FilterInputStream {
         } else {
             final int data = getCache().read();
             
-            if(data == FileFilterInputStreamCache.END_OF_STREAM) {
+            if(data == FilterInputStreamCache.END_OF_STREAM) {
                 return FilterInputStreamCache.END_OF_STREAM;
             }
             
