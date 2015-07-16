@@ -26,8 +26,8 @@
  */
 package uk.org.adamretter.restream.cache;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 
 /**
  * Cache implementation for CachingFilterInputStream
@@ -37,11 +37,11 @@ import java.io.IOException;
  *
  * @author Adam Retter <adam.retter@googlemail.com>
  */
-public class MemoryFilterInputStreamCache implements FilterInputStreamCache {
+public class MemoryFilterInputStreamCache extends AbstractFilterInputStreamCache {
+private java.io.ByteArrayOutputStream cache = new java.io.ByteArrayOutputStream();
 
-    private ByteArrayOutputStream cache = new ByteArrayOutputStream();
-
-    public MemoryFilterInputStreamCache() {
+    public MemoryFilterInputStreamCache(InputStream src) {
+        super(src);
     }
 
     @Override
@@ -71,7 +71,7 @@ public class MemoryFilterInputStreamCache implements FilterInputStreamCache {
 
     @Override
     public void invalidate() throws IOException {
-        if(cache != null) {
+        if (cache != null) {
             cache.close();
             cache = null;
         }
@@ -80,10 +80,9 @@ public class MemoryFilterInputStreamCache implements FilterInputStreamCache {
     /**
      * Updates to the cache are not reflected in the underlying input stream
      */
-    
     //TODO refactor this so that updates to the cache are reflected
     /*@Override
-    public InputStream getIndependentInputStream() {
-        return new ByteArrayInputStream(cache.toByteArray());
-    }*/
+     public InputStream getIndependentInputStream() {
+     return new ByteArrayInputStream(cache.toByteArray());
+     }*/
 }
