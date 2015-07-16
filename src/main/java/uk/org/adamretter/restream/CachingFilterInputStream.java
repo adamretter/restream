@@ -32,6 +32,7 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
+
 /**
  * Implementation of an Input Stream that extends
  * any InputStream with mark() and reset() capabilities
@@ -51,43 +52,30 @@ public class CachingFilterInputStream extends FilterInputStream {
 
     //TODO what about if the underlying stream supports marking
     //then we could just use its capabilities?
-    
-    private final static int END_OF_STREAM = -1;
-    private final static String INPUTSTREAM_CLOSED = "The underlying InputStream has been closed";
-
-    private final InputStream src;
     private final FilterInputStreamCache cache;
 
-    private boolean srcClosed = false;
     private int srcOffset = 0;
     private int mark = 0;
-    private boolean useCache = false;
-    private int cacheOffset = 0;
-
-    //TODO ensure that FilterInputStreamCache implementations are thread-safe
 
     /**
-     * @param cache The cache implementation
-     * @param src The source InputStream to cache reads for
+     * Constructor which uses an existing Cache from a CachingFilterInputStream,
+     * if inputStream is a CachingFilterInputStream.
+     *
+     * @param inputStream
      */
-    public CachingFilterInputStream(final FilterInputStreamCache cache, final InputStream src) {
-        super(src);
-        this.src = src;
-        this.cache = cache;
+    public CachingFilterInputStream(InputStream inputStream) throws InstantiationException {
+        super(null);
+
+        if (inputStream instanceof CachingFilterInputStream) {
+            this.cache = ((CachingFilterInputStream) inputStream).getCache();
+        } else {
+            throw new InstantiationException("Only CachingFilterInputStream are supported as InputStream");
+        }
     }
 
-    /**
-     * Constructor which uses an existing CachingFilterInputStream as its
-     * underlying InputStream
-     *
-     * The position in the stream and any mark is reset to zero
-     */
-    public CachingFilterInputStream(final CachingFilterInputStream cfis) {
-        this(cfis.getCache(), cfis);
-        this.srcClosed = cfis.srcClosed;
-        this.useCache = cfis.srcOffset > 0;
-        this.cacheOffset = cfis.cacheOffset; //TODO is this correct?
-        //this.srcOffset = cfis.srcOffset; //TODO is this correct?
+    public CachingFilterInputStream(final FilterInputStreamCache cache) {
+        super(null);
+        this.cache = cache;
     }
 
     /**
@@ -99,22 +87,8 @@ public class CachingFilterInputStream extends FilterInputStream {
 
     @Override
     public int available() throws IOException {
-
-        int available = 0;
-
-        if(!srcClosed) {
-
-            available = src.available();
-
-            if(useCache && cacheOffset < srcOffset) {
-                available += getCache().getLength() - cacheOffset;
-            }
-        }
-
-        return available;
+        return getCache().available() - srcOffset;
     }
-
-
 
     @Override
     public synchronized void mark(final int readLimit) {
@@ -128,40 +102,28 @@ public class CachingFilterInputStream extends FilterInputStream {
 
     @Override
     public synchronized void reset() throws IOException {
-        useCache = true;
-        cacheOffset = mark;
+        srcOffset = mark;
     }
 
     @Override
     public int read() throws IOException {
 
-        if(srcClosed) {
-            throw new IOException(INPUTSTREAM_CLOSED);
+        if (getCache().isSrcClosed()) {
+            throw new IOException(FilterInputStreamCache.INPUTSTREAM_CLOSED);
         }
 
-        if(useCache && cacheOffset < srcOffset) {
-            final int data = getCache().get(cacheOffset++);
-
-            //are we outside the cache
-            if(cacheOffset >= srcOffset) {
-                useCache = false;
-            }
+        //Read from cache
+        if (useCache()) {
+            final int data = getCache().get(srcOffset++);
             return data;
-
         } else {
-            final int data = src.read();
-
-            //have we reached the end of the stream?
-            if(data == END_OF_STREAM) {
-                return END_OF_STREAM;
-            }
-
-            //increment srcOffset due to read operation above
-            srcOffset++;
+            final int data = getCache().read();
             
-            //store data in cache
-            getCache().write(data);
-
+            if(data == FilterInputStreamCache.END_OF_STREAM) {
+                return FilterInputStreamCache.END_OF_STREAM;
+            }
+            
+            srcOffset++;
             return data;
         }
     }
@@ -174,32 +136,28 @@ public class CachingFilterInputStream extends FilterInputStream {
     @Override
     public int read(final byte[] b, final int off, final int len) throws IOException {
 
-        if(srcClosed) {
-            throw new IOException(INPUTSTREAM_CLOSED);
+        if (getCache().isSrcClosed()) {
+            throw new IOException(FilterInputStreamCache.INPUTSTREAM_CLOSED);
         }
 
-        if(useCache /* && cacheOffset < srcOffset */) {
+        if (useCache()) {
 
             //copy data from the cache
-            int actualLen = (len > getCache().getLength() - cacheOffset ? getCache().getLength() - cacheOffset : len);
-            getCache().copyTo(cacheOffset, b, off, actualLen);
-            cacheOffset += actualLen;
+            int actualLen = (len > getCache().getLength() - this.srcOffset ? getCache().getLength() - this.srcOffset : len);
+            getCache().copyTo(this.srcOffset, b, off, actualLen);
+            this.srcOffset += actualLen;
 
             //if the requested bytes were more than what is present in the cache, then also read from the src
-            if(actualLen < len) {
-                useCache = false;
-                int srcLen = src.read(b, off + actualLen, len - actualLen);
+            if (actualLen < len) {
+                int srcLen = getCache().read(b, off + actualLen, len - actualLen);
 
                 //have we reached the end of the stream?
-                if(srcLen == END_OF_STREAM) {
+                if (srcLen == FilterInputStreamCache.END_OF_STREAM) {
                     return actualLen;
                 }
 
                 //increase srcOffset due to the read opertaion above
                 srcOffset += srcLen;
-
-                //store data in cache
-                getCache().write(b, off + actualLen, srcLen);
 
                 actualLen += srcLen;
             }
@@ -207,18 +165,15 @@ public class CachingFilterInputStream extends FilterInputStream {
             return actualLen;
 
         } else {
-            int actualLen = src.read(b, off, len);
+            int actualLen = getCache().read(b, off, len);
 
             //have we reached the end of the stream?
-            if(actualLen == END_OF_STREAM) {
+            if (actualLen == FilterInputStreamCache.END_OF_STREAM) {
                 return actualLen;
             }
 
             //increase srcOffset due to read operation above
             srcOffset += actualLen;
-
-            //store data in cache
-            getCache().write(b, off, actualLen);
 
             return actualLen;
         }
@@ -229,71 +184,69 @@ public class CachingFilterInputStream extends FilterInputStream {
      */
     @Override
     public void close() throws IOException {
-        if(!srcClosed) {
-            try {
-                src.close();
-            } finally {
-                srcClosed = true;
-            }
-        }
-        getCache().invalidate(); //empty the cache
+        if(!getCache().isSrcClosed()) {
+            getCache().close();
+        }    
     }
-
-
+    
     /**
      * We cant actually skip as we need to read so that we can cache the data,
-     * however apart from the potentially increased I/O
-     * and Memory, the end result is the same
+     * however apart from the potentially increased I/O and Memory, the end
+     * result is the same
      */
     @Override
-    public long skip(final long n) throws IOException {
+    public long skip(final long len) throws IOException {
 
-        if(srcClosed) {
-            throw new IOException(INPUTSTREAM_CLOSED);
-        } else if(n < 1) {
+        if (getCache().isSrcClosed()) {
+            throw new IOException(FilterInputStreamCache.INPUTSTREAM_CLOSED);
+        } else if (len < 1) {
             return 0;
         }
 
-        if(useCache && cacheOffset < srcOffset) {
+        if (useCache()) {
 
             //skip data from the cache
-            long actualLen = (n > getCache().getLength() - cacheOffset ? getCache().getLength() - cacheOffset : n);
-            cacheOffset += actualLen;
+            long actualLen = (len > getCache().getLength() - this.srcOffset ? getCache().getLength() - this.srcOffset : len);
 
             //if the requested bytes were more than what is present in the cache, then also read from the src
-            if(actualLen < n) {
-                useCache = false;
-                
-                final byte skipped[] = new byte[(int)(n - actualLen)];
-                int srcLen = src.read(skipped);
+            if (actualLen < len) {
+                final byte skipped[] = new byte[(int) (len - actualLen)];
+                int srcLen = getCache().read(skipped);
 
                 //have we reached the end of the stream?
-                if(srcLen == END_OF_STREAM) {
+                if (srcLen == FilterInputStreamCache.END_OF_STREAM) {
                     return actualLen;
                 }
 
                 //increase srcOffset due to the read operation above
                 srcOffset += srcLen;
 
-                //store data in cache
-                getCache().write(skipped, 0, srcLen);
-                
                 actualLen += srcLen;
             }
             return actualLen;
 
         } else {
 
-            final byte skipped[] = new byte[(int)n];  //TODO could overflow
-            int actualLen = src.read(skipped);
+            final byte skipped[] = new byte[(int) len];  //TODO could overflow
+            int actualLen = getCache().read(skipped);
 
             //increase srcOffset due to read operation above
             srcOffset += actualLen;
 
-            //store data in the cache
-            getCache().write(skipped, 0, actualLen);
-
             return actualLen;
         }
+    }
+
+    private boolean useCache() {
+        //If cache hasRead and srcOffset is still in cache useCache
+        return getCache().getSrcOffset() > 0 && getCache().getLength() > srcOffset;
+    }
+    
+    public void register(InputStream inputStream) {
+        getCache().register(inputStream);
+    }
+    
+    public void deregister(InputStream inputStream) {
+        getCache().deregister(inputStream);
     }
 }
